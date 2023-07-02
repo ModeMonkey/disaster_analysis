@@ -1,4 +1,10 @@
 """
+Depricated.  Uses additional features from the Genre column but
+does not generate better results.  Main model uses few features
+for less processing time. 
+
+Preserved for posterity and for others looking to improve the model.
+
 Script is used to train a model to predict the cateogries 
 of messages.
 Script performs the following:
@@ -42,7 +48,7 @@ def load_data(database_filepath="data/DisasterResponse.db"):
     engine = create_engine(f'sqlite:///{database_filepath}')
     query = "SELECT * FROM merged_data"
     df = pd.read_sql(query, engine)
-    X_columns = ['id', 'message', 'original', 'genre']
+    X = df[["message", "genre"]] # Deprecated.  Used when using build_model_2
     X = df["message"]
     Y_columns = list(set(df.columns) - set(X_columns))
     Y = df[Y_columns]
@@ -67,6 +73,26 @@ def tokenize(text):
     stopwords_set = set(stopwords.words("english"))
     out_tokens = [tok for tok in lemma_tokens if tok not in stopwords_set]
     return out_tokens
+
+class ColumnSelector(BaseEstimator, TransformerMixin):
+    """
+    Select columns to be used in subsequent methods
+    in:
+        key = columns to keep in a list form
+    out:
+        transformer:
+            Dataframe with only the selected columns
+            Series if only only column is selected
+    """
+#
+    def __init__(self, key):
+        self.key = key
+#
+    def fit(self, x, y=None):
+        return self
+#
+    def transform(self, X):
+        return X[self.key]
 
 class PatternMatcher(BaseEstimator, TransformerMixin):
     """
@@ -112,30 +138,39 @@ class GenreClassifier(BaseEstimator, TransformerMixin):
 
 def build_model():
     """
-    Builds model for the pipeline.  
-    Tokenizes the messages in the message column.
-    Also records if a quesiton or exclamation mark
-    was present in a message.
-    Allows for multiple categories to be predicted
-    by using the  MultiOutputClassifier method. 
-    Predicts a message's categories using the Random
-    Forest Classifier method.
+    Deprecated.  Kept for prosperity.
+    Does not perform better than build_model but requires additional
+    processing.
+    Relys on two columns of data from the messages dataset - message and Genre.
+    One hot encoding the values of the Genre column does not improve the model's
+    ability to predict associated categories of a message.
     """
     pipeline = Pipeline([
         ('features', FeatureUnion([
             ('text_pipeline', Pipeline([
+                ("text_pipeline_column", ColumnSelector(key="message")),
                 ('vect', CountVectorizer(tokenizer=tokenize)),
                 ('tfidf', TfidfTransformer())
             ])),
-            ('exclamation_present', PatternMatcher(pattern=r"\!")),
-            ('question_mark_present', PatternMatcher(pattern=r"\?")),
+            ('exclamation_pipeline', Pipeline([
+                ("exclamation_pipeline_column", ColumnSelector("message")),
+                ('exclamation_present', PatternMatcher(pattern=r"\!")),
+            ])),
+            ('question_pipeline', Pipeline([
+                ("question_pipeline_column", ColumnSelector("message")),
+                ('question_mark_present', PatternMatcher(pattern=r"\?")),
+            ])),
+            ('genre_pipeline', Pipeline([
+                ("genre_pipeline_column", ColumnSelector(key="genre")),
+                ('genre_pipeline_columns', GenreClassifier()),
+            ])),
         ])),
         ('clf', MultiOutputClassifier(RandomForestClassifier()))
     ])
     parameters = {
-        'features__text_pipeline__vect__ngram_range': ((1, 1), (1, 2), (1,3)),
+        'features__text_pipeline__vect__ngram_range': ((1, 1), (1, 2)),
         'features__text_pipeline__tfidf__use_idf': [True, False],
-        'clf__estimator__n_estimators': [2, 3, 4, 10]
+        'clf__estimator__n_estimators': [2, 3, 4]
     }
     cv = GridSearchCV(pipeline, param_grid=parameters, cv=3, verbose=1)
     return cv
