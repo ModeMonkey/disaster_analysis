@@ -12,6 +12,7 @@ Script performs the following:
 import sys
 import re
 import operator
+import pickle
 
 import pandas as pd
 import numpy as np
