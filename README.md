@@ -4,8 +4,7 @@
 The purpose of this project is to predict the purpose of incoming messages during a disaster among many categories, to include requests for aid, food, water, medical, etc. 
 
 ### Instructions:
-1. Install necessary requirements.
-    `pip install -r requirements.txt`
+1. Install necessary requirements. `pip install -r requirements.txt`
 
 1. Run the following commands in the project's root directory to set up your database and model.
 
