@@ -1,29 +1,85 @@
+import joblib
 import json
-import plotly
 import pandas as pd
-
-from nltk.stem import WordNetLemmatizer
-from nltk.tokenize import word_tokenize
+import plotly
+import re
 
 from flask import Flask
 from flask import render_template, request, jsonify
+from nltk.stem import WordNetLemmatizer
+from nltk.tokenize import sent_tokenize, word_tokenize
+from nltk.corpus import stopwords, wordnet
 from plotly.graph_objs import Bar
-from sklearn.externals import joblib
+from sklearn.base import BaseEstimator, TransformerMixin
 from sqlalchemy import create_engine
-
 
 app = Flask(__name__)
 
+# Functions used in the pipeline need ot be present
+# so that the pickled model can reference them for
+# new data
+
 def tokenize(text):
-    tokens = word_tokenize(text)
+    """
+    Strip all non-alpha characters from string, lower, strip.
+    Then tokenize, lemmatize, and remove stopwords from string.
+    In:
+        text = string with multiple words and sentences.
+    Out:
+        tokens that have been generated from text
+    """
+    text = re.sub("[^a-zA-Z]", " ", text)
+    text = re.sub("  +", " ", text)
+    text = text.lower()
+    text = text.strip(" ")
+    all_tokens = [token for sent in sent_tokenize(text) for token in word_tokenize(sent)]
     lemmatizer = WordNetLemmatizer()
+    lemma_tokens = [lemmatizer.lemmatize(tok) for tok in all_tokens]
+    stopwords_set = set(stopwords.words("english"))
+    out_tokens = [tok for tok in lemma_tokens if tok not in stopwords_set]
+    return out_tokens
 
-    clean_tokens = []
-    for tok in tokens:
-        clean_tok = lemmatizer.lemmatize(tok).lower().strip()
-        clean_tokens.append(clean_tok)
+class PatternMatcher(BaseEstimator, TransformerMixin):
+    """
+    Select columns to be used in subsequent methods
+    in:
+        pattern = pattern to match against
+        Example: PatternMatcher(pattern="\!")
+    out:
+        transformer:
+            Series of True/False values stating if
+            pattern was found
+    """
+    def __init__(self, pattern):
+        self.pattern = pattern
+#
+    def fit(self, x, y=None):
+        return self
+#
+    def transform(self, X):
+        X_tagged = pd.Series(X).str.contains(self.pattern)
+        return pd.DataFrame(X_tagged)
 
-    return clean_tokens
+class GenreClassifier(BaseEstimator, TransformerMixin):
+    """
+    Deprecated.  Preserved for prosperity. 
+    Relys on two columns of data from the messages dataset - message and Genre.
+    One hot encoding the values of the Genre column does not improve the model's
+    ability to predict associated categories of a message.
+    """
+#
+    def fit(self, x, y=None):
+        return self
+#
+    def transform(self, X):
+        direct_mask = pd.Series(X).str.contains("direct")
+        news_mask = pd.Series(X).str.contains("news")
+        social_mask = pd.Series(X).str.contains("social")
+        out_df = pd.DataFrame()
+        out_df["direct"] = direct_mask
+        out_df["news"] = news_mask
+        out_df["social"] = social_mask
+        return out_df
 
 # load data
 engine = create_engine('sqlite:///../data/DisasterResponse.db')
